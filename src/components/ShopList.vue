@@ -20,9 +20,7 @@
               <span>{{ changePrice1(listItem.price) }}</span>.{{ changePrice2(listItem.price) }}
             </div>
           </div>
-          <!--          <div class="plus">-->
-          <!--            <van-icon name="plus"/>-->
-          <!--          </div>-->
+          
         </div>
       </div>
     </div>

@@ -66,7 +66,7 @@
 
       </div>
       <!--    甄选-->
-      <div class="flexBox" v-if="$store.state.festivals != 2  && zoneFlag != 1">
+      <div class="flexBox" v-if="$store.state.festivals != 2 && zoneFlag != 1">
         <div class="toHome" v-for="(item, index) in funList.slice(0, 1)" :key="item.id"
           @click="toNext(item.path, index)">
           <img class="img imgTitle" :src="item.img" alt="">
@@ -102,12 +102,12 @@
           @click="helpfamer(support_farmers.id)">
       </div>
       <!--      限时抢购-->
-      <div class="sortBox panicBuying" v-if="flashSale.length > 0 && $store.state.festivals != 2  && zoneFlag != 1">
+      <div class="sortBox panicBuying" v-if="flashSale.length > 0 && $store.state.festivals != 2 && zoneFlag != 1">
         <div class="panicTop">
           <div>
             <div class="downtimeBack">
               <div class="panicImg">
-                特卖专区 
+                特卖专区
               </div>
               <div style="color: #A8C2D6;font-size: 12px">|</div>
               <div class="text">超值好货不容错过</div>
@@ -243,12 +243,13 @@ export default {
         },
       ],
       active: 0,
-      tabList: [{
-        flag: "1",
-        id: "0",
-        syname: "热门推荐",
-        tag: "精选好物",
-      }],
+      // tabList: [{
+      //   flag: "1",
+      //   id: "0",
+      //   syname: "热门推荐",
+      //   tag: "精选好物",
+      // }],
+      tabList: [],
       shopSwiper: [],
       itemHeight: 0,
       swiperHeight: 0,
@@ -386,6 +387,7 @@ export default {
       return price.toString().includes(".") ? Number(price).toFixed(2).toString().split('.')[1] : "00"
     },
     changeTab(id, index) {
+      if (this.isLoading) return
       this.isHeight = true
       this.isScroll = false
       this.shopList = []
@@ -449,7 +451,7 @@ export default {
       this.itemHeight = a
     },
     helpfamer(id) {
-      this.$router.push({ path: "/HelpFamer", query: { id: id ,zoneFlag:this.zoneFlag} })
+      this.$router.push({ path: "/HelpFamer", query: { id: id, zoneFlag: this.zoneFlag } })
     },
     getIndex() {
       getIndexList().then(res => {
@@ -474,26 +476,73 @@ export default {
     getFlashSaleList() {
       flashSaleList().then(res => {
         if (res.code == 200) {
-          res.data.product_class.forEach(item => {
-            this.tabList.push(item)
-          })
-          if (this.$store.state.festivals == 2) {
-            this.tabList = this.tabList.filter(item => item.id == 1 || item.id == 2 || item.id == 3)
+          // 1. 定义临时数组接收数据
+          let tempTabs = [];
+
+          // 2. 我们手动把“热门推荐”塞进第一个
+          tempTabs.push({
+            flag: "1",
+            id: "0",
+            syname: "热门推荐",
+            tag: "精选好物"
+          });
+
+          // 3. 把接口返回的数据合并进去
+          if (res.data.product_class && res.data.product_class.length > 0) {
+            tempTabs = tempTabs.concat(res.data.product_class);
           }
-          if (this.tabList.length > 0) {
-            this.active = this.tabList[0].id
-            if (this.$store.state.festivals == 2) {
-              this.getHot(this.active, 1)
+
+          // 4. 如果有节日特殊过滤需求，保留原样
+          if (this.$store.state.festivals == 2) {
+            tempTabs = tempTabs.filter(item => item.id == 0 || item.id == 1 || item.id == 2 || item.id == 3);
+          }
+
+          // 5. 【核心关键】：利用 Map 根据 id 进行绝对去重
+          let uniqueTabs = [];
+          let idMap = new Map();
+          for (let item of tempTabs) {
+            // 如果这个 id 还没出现过，才把它放进最终数组
+            if (!idMap.has(item.id)) {
+              idMap.set(item.id, true);
+              uniqueTabs.push(item);
             }
           }
-          this.flashSale = res.data.flash_sale
+
+          // 6. 赋值给真正的 tabList
+          this.tabList = uniqueTabs;
+
+          // 7. 设置默认选中的 tab
+          if (this.tabList.length > 0) {
+            this.active = this.tabList[0].id;
+            if (this.$store.state.festivals == 2) {
+              this.getHot(this.active, 1);
+            }
+          }
+
+          this.flashSale = res.data.flash_sale;
         }
       })
     },
+    // getFlashSaleList() {
+    //   flashSaleList().then(res => {
+    //     if (res.code == 200) {
+    //       res.data.product_class.forEach(item => {
+    //         this.tabList.push(item)
+    //       })
+    //       if (this.$store.state.festivals == 2) {
+    //         this.tabList = this.tabList.filter(item => item.id == 1 || item.id == 2 || item.id == 3)
+    //       }
+    //       if (this.tabList.length > 0) {
+    //         this.active = this.tabList[0].id
+    //         if (this.$store.state.festivals == 2) {
+    //           this.getHot(this.active, 1)
+    //         }
+    //       }
+    //       this.flashSale = res.data.flash_sale
+    //     }
+    //   })
+    // },
     getHot(fid, pageno = this.pageno) {
-      if (this.isTab) {
-        this.shopList = []
-      }
       this.isLoading = true
       getHotList({
         fid,
@@ -509,22 +558,25 @@ export default {
             this.isScroll = true
             return
           }
+
+          // 新增：如果是切换tab或请求第一页，先清空列表
+          if (this.isTab || pageno === 1) {
+            this.shopList = []
+            this.isTab = false
+          }
+
+          // 新增：兼容性最好的去重逻辑
           res.data.product_list.forEach(item => {
-            this.shopList.push(item)
+            const isExist = this.shopList.some(existingItem => existingItem.id === item.id)
+            if (!isExist) {
+              this.shopList.push(item)
+            }
           })
-          this.isTab = false
-          // if(this.$refs.bannerBox){
-          //   setTimeout(() => {
-          //     this.swiperHeight = (this.$refs.bannerBox.getBoundingClientRect().height).toFixed(0)
-          //   }, 200)
-          // }
         }
       })
     },
+
     getGoodPick(pageno = this.pageno) {
-      if (this.isTab) {
-        this.shopList = []
-      }
       this.isLoading = true
       getGoodPickList({
         pageno,
@@ -539,19 +591,24 @@ export default {
             this.isScroll = true
             return
           }
+
+          // 新增：如果是切换tab或请求第一页，先清空列表
+          if (this.isTab || pageno === 1) {
+            this.shopList = []
+            this.isTab = false
+          }
+
+          // 新增：兼容性最好的去重逻辑
           res.data.product_list.forEach(item => {
-            this.shopList.push(item)
+            const isExist = this.shopList.some(existingItem => existingItem.id === item.id)
+            if (!isExist) {
+              this.shopList.push(item)
+            }
           })
-          // console.log( this.shopList.length)
-          this.isTab = false
-          // if(this.$refs.bannerBox){
-          //   setTimeout(() => {
-          //     this.swiperHeight = (this.$refs.bannerBox.getBoundingClientRect().height).toFixed(0)
-          //   }, 200)
-          // }
         }
       })
     },
+
     getCity(e) {
       this.isShow = false
     },
@@ -559,27 +616,54 @@ export default {
       this.$router.push(path)
     },
     //滚动条事件
+    // handleScroll(e) {
+    //   let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+    //   let scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+    //   let clientHeight = document.documentElement.clientHeight || document.body.clientHeight;
+    //   // console.log(Math.ceil(scrollTop + clientHeight), scrollHeight)
+    //   if (Math.ceil(scrollTop + clientHeight) >= scrollHeight && !this.isTab) {
+    //     this.onMost()
+    //   }
+    // },
+    // onMost() {
+    //   // console.log(this.isScroll)
+    //   if (!this.isScroll) {
+    //     this.pageno++
+    //     // console.log(this.active,this.pageno)
+    //     if (this.active == 0) {
+    //       this.getGoodPick(this.pageno)
+    //     } else {
+    //       this.getHot(this.active, this.pageno)
+    //     }
+    //   }
+    // },
+    // 1. 修改 handleScroll
     handleScroll(e) {
       let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
       let scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
       let clientHeight = document.documentElement.clientHeight || document.body.clientHeight;
-      // console.log(Math.ceil(scrollTop + clientHeight), scrollHeight)
-      if (Math.ceil(scrollTop + clientHeight) >= scrollHeight && !this.isTab) {
+
+      // 当距离底部小于 100px 时触发加载 (比直接等于底部更灵敏)
+      if (Math.ceil(scrollTop + clientHeight) >= scrollHeight - 100 && !this.isTab) {
         this.onMost()
       }
     },
+
+    // 2. 修改 onMost (加上 isLoading 锁)
     onMost() {
-      // console.log(this.isScroll)
+      // 【核心防御1】：如果正在加载中，直接 return，不执行任何逻辑
+      if (this.isLoading) return;
+
       if (!this.isScroll) {
         this.pageno++
-        // console.log(this.active,this.pageno)
         if (this.active == 0) {
           this.getGoodPick(this.pageno)
         } else {
           this.getHot(this.active, this.pageno)
         }
       }
-    }, initPageData() {
+    },
+    initPageData() {
       this.getIndex();
       this.getFlashSaleList();
       if (this.$store.state.festivals != 2) {
@@ -604,8 +688,17 @@ export default {
       this.isShow = false
     }
   },
+  // activated() {
+  //   this.initPageData()
+  // },
   activated() {
-    this.initPageData()
+    // 如果 shopList 是空的，说明是首次进入，才加载数据
+    if (this.shopList.length === 0) {
+      this.initPageData()
+    } else {
+      // 可选：如果希望每次切回首页都刷新一下头部轮播图，可以单独调 getIndex()
+      this.getIndex()
+    }
   },
   mounted() {
     window.addEventListener('scroll', this.handleScroll);
